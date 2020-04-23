@@ -7,6 +7,7 @@ session_config = tf.compat.v1.ConfigProto(gpu_options=tf.compat.v1.GPUOptions(al
 sess = tf.compat.v1.Session(config=session_config)
 
 
+# TODO: REFACTOR FROM STRINGS TO NUMPY ARRAY
 # Translate dna defined in string to model
 def model_from_dna(dna):
     arr = dna.split(",")                # Genes separated by commas ','
