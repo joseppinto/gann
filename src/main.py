@@ -19,7 +19,7 @@ toolbox = init_ga(run_dna,                             # Pass evaluation functio
                   train_x, train_y, valid_x, valid_y   # Pass problem data
                   )
 
-for df in run_ga(toolbox, pop_size=10, max_gens=10):
+for df in run_ga(toolbox, pop_size=100, max_gens=100):
     df.to_csv('df.csv', index=False)
 
 

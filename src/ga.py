@@ -29,19 +29,19 @@ MATING_RATE = 0.5
 
 # MUTATION RATES
 # Chance of an individual going through mutation process
-OVERALL_MUTATION_RATE = 0.5
+OVERALL_MUTATION_RATE = 1
 # Factor that influences batch size mutation probability
-BS_MUTATION_FACTOR = .05
+BS_MUTATION_FACTOR = .5
 # Factor that influences learning rate mutation probability
-LR_MUTATION_FACTOR = .05
+LR_MUTATION_FACTOR = .5
 # Factor that influences dropout layer mutation
-DROPOUT_MUTATION_FACTOR = .1
+DROPOUT_MUTATION_FACTOR = .5
 # Factor that influences the mutation probability of dense layers activation
 ACTIVATION_MUTATION_FACTOR = .2
 # Factor that influences the mutation probability of dense layers' size
-LSIZE_MUTATION_FACTOR = .1
+LSIZE_MUTATION_FACTOR = .5
 # Factor that influences the layer block mutation probability
-BLOCK_MUTATION_FACTOR = .05
+BLOCK_MUTATION_FACTOR = .1
 
 
 # Function to initialize individual (used in the first generation)
@@ -111,30 +111,22 @@ def mutate(container, individual):
     r = np.random.rand(individual.size)         # Random numbers that determine mutation in single genes
     # Mutate batch size
     if r[0] < BS_MUTATION_FACTOR:
-        individual[0] /= 2
-    elif r[0] < 2*BS_MUTATION_FACTOR:
-        individual[0] *= 2
+        individual[0] *= abs(np.random(1, 0.5))
 
     # Mutate learning rate
     if r[1] < LR_MUTATION_FACTOR:
-        individual[1] /= 2
-    elif r[1] < 2*LR_MUTATION_FACTOR:
-        individual[1] *= 2
+        individual[1] *= abs(np.random(1, 0.5))
 
     # Mutate single layers
     for i in range(2, individual.size):
         if i % 3 == 2:      # Dense layer
             if r[i] < LSIZE_MUTATION_FACTOR:
-                individual[i] = int(individual[i] / 2) + round((individual[i] % 1) * 10) / 10.0  # Preserve decimal part
-            elif r[i] < 2 * LSIZE_MUTATION_FACTOR:
-                individual[i] = int(individual[i] * 2) + round((individual[i] % 1) * 10) / 10.0  # Preserve decimal part
-            elif r[i] < ACTIVATION_MUTATION_FACTOR + 2 * LSIZE_MUTATION_FACTOR:
+                individual[i] = int(individual[i] * abs(np.random(1, 0.5))) + round((individual[i] % 1) * 10) / 10.0  # Preserve decimal part
+            elif r[i] < ACTIVATION_MUTATION_FACTOR + LSIZE_MUTATION_FACTOR:
                 individual[i] = int(individual[i]) + random.choice(list(DENSE_ACTIVATIONS.keys()))     # Mutate activation
         elif i % 3 == 0:    # Dropout layer
             if r[i] < DROPOUT_MUTATION_FACTOR:
-                individual[i] *= 2
-            elif r[i] < 2 * DROPOUT_MUTATION_FACTOR:
-                individual[i] /= 2
+                individual[i] *= abs(np.random(1, 0.5))
     return container(individual)
 
 
