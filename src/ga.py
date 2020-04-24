@@ -3,6 +3,9 @@ import random
 from deap import base
 from deap import creator
 from deap import tools
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 # INITIAL CONFIGURATION SPACE
 # Possible batch sizes in first generation of nn architectures
@@ -20,6 +23,9 @@ DENSE_ACTIVATIONS = {.1: 'tanh',
                      }
 # Possible initial dropout rates
 INITIAL_DROPOUT_RATES = [0, 0.05, 0.1]
+
+# MATING RATE
+MATING_RATE = 0.5
 
 # MUTATION RATES
 # Chance of an individual going through mutation process
@@ -39,25 +45,25 @@ BLOCK_MUTATION_FACTOR = .05
 
 
 # Function to initialize individual (used in the first generation)
-def init_individual():
-    ind = np.array(dtype='float16')
+def init_individual(container):
+    ind = np.array([], dtype='float16')
     # Add batch size
-    ind.append(random.choice(INITIAL_BATCH_SIZES))
+    ind = np.append(ind, random.choice(INITIAL_BATCH_SIZES))
     # Add learning rate
-    ind.append(random.choice(INITIAL_LEARNING_RATES))
+    ind = np.append(ind, random.choice(INITIAL_LEARNING_RATES))
 
     # Random number of initial layer groups (dense + dropout + normalization)
     # Initial structure for the networks
     n_layer_groups = random.randint(1, 5)
     for i in range(n_layer_groups):
         # Add a dense layer
-        ind.append(random.choice(DENSE_ACTIVATIONS.keys()) + random.choice(INITIAL_DENSE_SIZE))
+        ind = np.append(ind, random.choice(list(DENSE_ACTIVATIONS.keys())) + random.choice(INITIAL_DENSE_SIZE))
         # Add a dropout layer
-        ind.append(random.choice(INITIAL_DROPOUT_RATES))
+        ind = np.append(ind, random.choice(INITIAL_DROPOUT_RATES))
         # Add a normalization layer
-        ind.append(-1)
+        ind = np.append(ind, -1)
 
-    return ind
+    return container(ind)
 
 
 def mate(child1, child2):
@@ -72,7 +78,7 @@ def mate(child1, child2):
 
     # For each block, each children has a 50-50 chance of getting
     # that same block equal to each parent
-    min_len = (min(child1.size, child2.size) - 2)/3
+    min_len = int((min(child1.size, child2.size) - 2)/3)
     for block in range(min_len):
         l1 = child1[block + 2]
         l2 = child1[block + 3]
@@ -87,23 +93,19 @@ def mate(child1, child2):
             child2[block + 4] = l3
 
 
-def mutate(individual):
-    r = np.random.rand((individual.size - 2))   # Random numbers that determine mutation in layer blocks
-    c = 0                                       # Counter of variation of blocks (that might be deleted or duped)
+def mutate(container, individual):
+    r = np.random.rand(int((individual.size - 2)/3))    # Random numbers that determine mutation in layer blocks
+    c = 0                                               # Counter of block variation (they might be deleted or duped)
     for i in range(r.size):
-        if r < BLOCK_MUTATION_FACTOR:
-            np.delete(individual, [(r[i] + c) * 3 + 2,    # Delete layer block
-                                   (r[i] + c) * 3 + 3,
-                                   (r[i] + c) * 3 + 4])
+        if r[i] < BLOCK_MUTATION_FACTOR:
+            individual = np.delete(individual, [(i + c) * 3 + 2,    # Delete layer block
+                                                (i + c) * 3 + 3,
+                                                (i + c) * 3 + 4])
             c -= 1
-        elif r < 2*BLOCK_MUTATION_FACTOR:
-            np.insert(individual, [(r[i] + c) * 3 + 2,
-                                   (r[i] + c) * 3 + 3,
-                                   (r[i] + c) * 3 + 4],
-                                  [individual[(r[i] + c) * 3 + 2],
-                                   individual[(r[i] + c) * 3 + 3],
-                                   individual[(r[i] + c) * 3 + 4]]
-                      )
+        elif r[i] < 2*BLOCK_MUTATION_FACTOR:
+            individual = np.insert(individual, (i + c) * 3 + 4,
+                                   individual[(i + c) * 3 + 2:(i + c) * 3 + 5]
+                                   )
             c += 1
 
     r = np.random.rand(individual.size)         # Random numbers that determine mutation in single genes
@@ -123,48 +125,96 @@ def mutate(individual):
     for i in range(2, individual.size):
         if i % 3 == 2:      # Dense layer
             if r[i] < LSIZE_MUTATION_FACTOR:
-                individual[i] = int(individual[i] / 2) + individual[i] % 1  # Preserve decimal part
+                individual[i] = int(individual[i] / 2) + round((individual[i] % 1) * 10) / 10.0  # Preserve decimal part
             elif r[i] < 2 * LSIZE_MUTATION_FACTOR:
-                individual[i] = int(individual[i] * 2) + individual[i] % 1  # Preserve decimal part
+                individual[i] = int(individual[i] * 2) + round((individual[i] % 1) * 10) / 10.0  # Preserve decimal part
             elif r[i] < ACTIVATION_MUTATION_FACTOR + 2 * LSIZE_MUTATION_FACTOR:
-                individual[i] = int(individual[i]) + random.choice(DENSE_ACTIVATIONS.keys())  # Mutate activation
+                individual[i] = int(individual[i]) + random.choice(list(DENSE_ACTIVATIONS.keys()))     # Mutate activation
         elif i % 3 == 0:    # Dropout layer
             if r[i] < DROPOUT_MUTATION_FACTOR:
                 individual[i] *= 2
             elif r[i] < 2 * DROPOUT_MUTATION_FACTOR:
                 individual[i] /= 2
+    return container(individual)
 
 
-def init_ga(eval_func, train_x, train_y, test_x, test_y):
+def init_ga(eval_func, train_x, train_y, test_x, test_y, eval_epochs=10):
     creator.create("FitnessMax", base.Fitness, weights=(1.0,))
-    creator.create("Individual", np.array(), fitness=creator.FitnessMax)
+    creator.create("Individual", np.ndarray, fitness=creator.FitnessMax)
 
     toolbox = base.Toolbox()
 
     # Structure initializers
     toolbox.register("individual",          # Register function to initialize individual
-                     init_individual()      # Function that initializes individual
-                     )                      # (i.e. layers/hyperparameters in a network)
+                     init_individual,       # Function that initializes individual
+                     creator.Individual
+                     )
 
     toolbox.register("population",          # Register function to initialize population
                      tools.initRepeat,      # Repeat initialization of elements (in this case individuals)
-                     np.array(),            # Base class of the population (list of individuals)
+                     list,                  # Base class of the population (list of individuals)
                      toolbox.individual     # Individual initializer
                      )                      # (i.e. neural network architecture)
 
     # Define evaluation function from function and data passed in arguments
     def evaluate(individual):
-        return eval_func(individual, train_x, train_y, test_x, test_y)
+        return eval_func(individual, eval_epochs, train_x, train_y, test_x, test_y),
 
     toolbox.register("evaluate", evaluate)
     toolbox.register("mate", mate)
-    toolbox.register("mutate", mutate, indpb=OVERALL_MUTATION_RATE)
+    # We have to pass the container, because the mutation may cause it to change size
+    toolbox.register("mutate", mutate, creator.Individual)
     # We'll use the framework's selection function
-    toolbox.register("select", tools.selBest, k=10)
+    toolbox.register("select", tools.selBest)
 
     return toolbox
 
 
-def run_ga(toolbox, pop_size=100):
+def run_ga(toolbox, pop_size=10, max_gens=10):
+    df = pd.DataFrame(columns=['gen', 'fitness', 'layers', 'lr', 'batch_size'])
     pop = toolbox.population(n=pop_size)
-    # TODO: COMPLETE THIS FUNCTION
+    # Evaluate the entire population
+    fitness = list(map(toolbox.evaluate, pop))
+    for ind, fit in zip(pop, fitness):
+        ind.fitness.values = fit
+
+    # Extracting all the fitness of
+    fits = [ind.fitness.values[0] for ind in pop]
+
+    g = 0
+    while max(fits) < 100 and g < max_gens:
+        print(f"Gen {g}")
+        g = g + 1
+        # Select the next generation individuals
+        offspring = toolbox.select(pop, int(len(pop)/5))
+        # Clone the selected individuals
+        offspring = [toolbox.clone(x) for x in offspring * 5]
+        # Apply crossover and mutation on the offspring
+        for child1, child2 in zip(offspring[::2], offspring[1::2]):
+            if random.random() < MATING_RATE:
+                toolbox.mate(child1, child2)
+                del child1.fitness.values
+                del child2.fitness.values
+
+        for i in range(len(offspring)):
+            if random.random() < OVERALL_MUTATION_RATE:
+                offspring[i] = toolbox.mutate(offspring[i])
+
+        # Reevaluate individuals that changed since last gen
+        invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
+        fitnesses = map(toolbox.evaluate, invalid_ind)
+        for ind, fit in zip(invalid_ind, fitnesses):
+            ind.fitness.values = fit
+
+        # Register gen stats in dataframe
+        row = {'gen': g}
+        for i in pop:
+            row['fitness'] = i.fitness.values[0]
+            row['layers'] = i.size - 2
+            row['lr'] = i[1]
+            row['batch_size'] = i[0]
+            df = df.append(row, ignore_index=True)
+
+        pop[:] = offspring
+
+        yield df

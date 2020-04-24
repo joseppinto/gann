@@ -2,38 +2,25 @@ import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout, BatchNormalization
 from tensorflow.keras.optimizers import Adam
+from ga import DENSE_ACTIVATIONS
 
 session_config = tf.compat.v1.ConfigProto(gpu_options=tf.compat.v1.GPUOptions(allow_growth=True))
 sess = tf.compat.v1.Session(config=session_config)
 
 
-# TODO: REFACTOR FROM STRINGS TO NUMPY ARRAY
 # Translate dna defined in string to model
 def model_from_dna(dna):
-    arr = dna.split(",")                # Genes separated by commas ','
-    batch_size = int(arr[0])            # First gene -> batch size
-    lr = float(arr[1])                  # Second gene -> learning rate
+    batch_size = int(dna[0])            # First gene -> batch size
+    lr = float(dna[1])                  # Second gene -> learning rate
 
     model = Sequential()
-    for i in range(2, len(arr)):        # Remaining genes are neuron layers
-        type = arr[i][0]                # First symbol -> type of layer
-        opt = arr[i][1]                 # Second symbol -> option relevant to layer type (e.g. activation function)
-        if type == 'd':
-            num = float(arr[i][2:])     # Remaining symbols, layer structure properties (e.g. number of neurons)
-            model.add(Dropout(num))
-        elif type == 'D':
-            num = int(arr[i][2:])
-            if opt == 'r':
-                act = 'relu'
-            elif opt == 't':
-                act = 'tanh'
-            elif opt == 'l':
-                act = 'linear'
-            elif opt == 's':
-                act = 'sigmoid'
-            model.add(Dense(num, activation=act))
-        elif type == 'N':
+    for i in range(2, dna.size):        # Remaining genes are neuron layers
+        if dna[i] < 0:
             model.add(BatchNormalization())
+        elif dna[i] > 1:                # If it is a dense layer, integer part is number of nodes, decimal is activation
+            model.add(Dense(int(dna[i]), activation=DENSE_ACTIVATIONS[round((dna[i] % 1) * 10) / 10.0]))
+        elif dna[i] < 1:                # No integer part means dropout layer
+            model.add(Dropout(dna[i]))
 
     model.add(Dense(2, activation='sigmoid'))   # Final layer will always be the same (binary classification)
 
@@ -43,7 +30,7 @@ def model_from_dna(dna):
 # Build, train and test neural network architecture from dna string
 # Returns average of 5 best accuracies reached in training test
 # This function evaluates the performance of a nn architecture on a given dataset
-def run_dna(dna, epochs, train_x, train_y, valid_x, valid_y):
+def run_dna(dna, eval_epochs, train_x, train_y, valid_x, valid_y):
     batch_size, lr, model = model_from_dna(dna)             # Extract batch size and learning rate and build model
 
     opt = Adam(lr=lr)                                       # Configure optimizer with learning rate
@@ -53,10 +40,11 @@ def run_dna(dna, epochs, train_x, train_y, valid_x, valid_y):
 
     history = model.fit(train_x, train_y,
                         batch_size=batch_size,
-                        epochs=epochs,
+                        epochs=eval_epochs,
                         verbose=1,
                         validation_data=(valid_x, valid_y)
                         )
-    accs = list(history.history['val_accuracy'])                # Get accuracies from train history
-    accs.sort(reverse=True)
-    return sum(accs[:5])/5
+    accuracy = list(history.history['val_accuracy'])                # Get accuracies from train history
+    accuracy.sort(reverse=True)
+    best = accuracy[:3]
+    return sum(best)/len(best)
