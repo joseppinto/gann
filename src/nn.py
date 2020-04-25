@@ -10,33 +10,44 @@ sess = tf.compat.v1.Session(config=session_config)
 
 # Translate dna defined in string to model
 def model_from_dna(dna):
-    batch_size = int(dna[0])            # First gene -> batch size
-    lr = float(dna[1])                  # Second gene -> learning rate
+    batch_size = int(max(dna[0], 1))            # Integer of first gene -> batch size, don't allow null or negatives
+    threshold = dna[0] - int(dna[0])            # Decimal of first gene -> classification threshold
+    lr = float(dna[1])                          # Second gene -> learning rate
 
     model = Sequential()
     for i in range(2, dna.size):        # Remaining genes are neuron layers
         if dna[i] < 0:
             model.add(BatchNormalization())
-        elif dna[i] > 1:                # If it is a dense layer, integer part is number of nodes, decimal is activation
-            model.add(Dense(int(dna[i]), activation=DENSE_ACTIVATIONS[round((dna[i] % 1) * 10) / 10.0]))
+        elif dna[i] >= 1:               # If it is a dense layer, integer part is number of nodes, decimal is activatio
+            act = round(dna[i] - int(dna[i]), 1)
+            # Fix a better workaround in the future
+            if act > 0.4:
+                act = 0.4
+            elif act < 0.1:
+                act = 0.1
+            model.add(Dense(int(dna[i]), activation=DENSE_ACTIVATIONS[act]))
         elif dna[i] < 1:                # No integer part means dropout layer
             model.add(Dropout(dna[i]))
 
-    model.add(Dense(2, activation='sigmoid'))   # Final layer will always be the same (binary classification)
+    model.add(Dense(1, activation='sigmoid'))   # Final layer will always be the same (binary classification)
 
-    return batch_size, lr, model                # Return batch size, learning rate, and built model
+    return batch_size, threshold, lr, model                # Return batch size, learning rate, and built model
 
 
 # Build, train and test neural network architecture from dna string
 # Returns average of 5 best accuracies reached in training test
 # This function evaluates the performance of a nn architecture on a given dataset
 def run_dna(dna, eval_epochs, train_x, train_y, valid_x, valid_y):
-    batch_size, lr, model = model_from_dna(dna)             # Extract batch size and learning rate and build model
+    batch_size, threshold, lr, model = model_from_dna(dna)  # Extract parameters and model
 
     opt = Adam(lr=lr)                                       # Configure optimizer with learning rate
-    model.compile(loss='sparse_categorical_crossentropy',
+    model.compile(loss='binary_crossentropy',
                   optimizer=opt,
-                  metrics=['accuracy'])
+                  metrics=[tf.keras.metrics.Recall(name='recall', thresholds=threshold),
+                           'accuracy',
+                           tf.keras.metrics.AUC(name='auc')
+                           ]
+                  )
 
     history = model.fit(train_x, train_y,
                         batch_size=batch_size,
@@ -44,7 +55,11 @@ def run_dna(dna, eval_epochs, train_x, train_y, valid_x, valid_y):
                         verbose=1,
                         validation_data=(valid_x, valid_y)
                         )
-    accuracy = list(history.history['val_accuracy'])                # Get accuracies from train history
-    accuracy.sort(reverse=True)
-    best = accuracy[:3]
-    return sum(best)/len(best)
+
+    recall = list(history.history['recall'])                                        # Get metrics from train history
+    auc = list(history.history['auc'])
+    metrics = sorted(zip(recall, auc), key=lambda t: t[1], reverse=True)[:3]   # Sort by recall
+    # Return average of 3 best recalls (and average of respective accuracies)
+    return sum([x[0] for x in metrics]) / len(metrics), \
+        sum([x[1] for x in metrics]) / len(metrics),
+

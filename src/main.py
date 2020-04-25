@@ -1,8 +1,6 @@
 import pandas as pd
 from nn import *
 from ga import *
-import seaborn as sns
-import matplotlib.pyplot as plt
 
 # Import datasets
 train = pd.read_csv("../data/train.csv")
@@ -16,11 +14,12 @@ valid_y = valid['cancer'].values
 
 # Run genetic algorithm
 toolbox = init_ga(run_dna,                             # Pass evaluation function (buils and trains from dna)
-                  train_x, train_y, valid_x, valid_y   # Pass problem data
+                  train_x, train_y, valid_x, valid_y,  # Pass problem data
+                  eval_epochs=10
                   )
 
-for df in run_ga(toolbox, pop_size=100, max_gens=100):
-    df.to_csv('df.csv', index=False)
+
+run_ga('df.csv', toolbox, pop_size=50, max_gens=100)
 
 
 
