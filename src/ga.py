@@ -112,7 +112,7 @@ def mutate(container, individual):
                                                 (i + c) * 3 + 4])
             c -= 1
         elif r[i] < 2*BLOCK_MUTATION_FACTOR:
-            individual = np.insert(individual, (i + c) * 3 + 4,
+            individual = np.insert(individual, (i + c) * 3 + 5,
                                    individual[(i + c) * 3 + 2:(i + c) * 3 + 5]
                                    )
             c += 1
