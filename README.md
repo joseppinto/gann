@@ -7,4 +7,4 @@ Solving a binary classification problem, using a Genetic Algorithm to optimize a
 
 <hr>
 
-### [Detailed Report]()
+### [Detailed Report](https://github.com/62random/gann/blob/master/report.pdf)
