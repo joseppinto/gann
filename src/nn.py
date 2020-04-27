@@ -56,8 +56,8 @@ def run_dna(dna, eval_epochs, train_x, train_y, valid_x, valid_y):
                         validation_data=(valid_x, valid_y)
                         )
 
-    recall = list(history.history['recall'])                                        # Get metrics from train history
-    auc = list(history.history['auc'])
+    recall = list(history.history['val_recall'])                                        # Get metrics from train history
+    auc = list(history.history['val_auc'])
     metrics = sorted(zip(recall, auc), key=lambda t: t[1], reverse=True)[:3]   # Sort by recall
     # Return average of 3 best recalls (and average of respective accuracies)
     return sum([x[0] for x in metrics]) / len(metrics), \

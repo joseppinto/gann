@@ -1,15 +1,17 @@
 import pandas as pd
 from nn import *
 from ga import *
+from sklearn.model_selection import StratifiedShuffleSplit
 
 # Import datasets
 train = pd.read_csv("../data/train.csv")
-train_x = train.drop('cancer', axis=1).values
-train_y = train['cancer'].values
+x = train.drop('cancer', axis=1).values
+y = train['cancer'].values
 
-valid = pd.read_csv("../data/test.csv")
-valid_x = valid.drop('cancer', axis=1).values
-valid_y = valid['cancer'].values
+sss = StratifiedShuffleSplit(n_splits=1)
+for train_idx, valid_idx in sss.split(x, y):
+    train_x, valid_x = x[train_idx], x[valid_idx]
+    train_y, valid_y = y[train_idx], y[valid_idx]
 
 
 # Run genetic algorithm
